@@ -1,164 +1,151 @@
-
 const express = require('express');
 const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
+const ejs = require('ejs')
 const jwt = require('jsonwebtoken');
 const dotenv = require('dotenv')
 dotenv.config()
 const bcrypt = require('bcrypt')
-
-
 const app = express();
 app.use(bodyParser.json())
-app.use(bodyParser.urlencoded({extended : false}))
+app.use(bodyParser.urlencoded({ extended: false }))
 app.set('view engine', 'ejs')
 
-
-app.get("/",(req,res)=>{
-        res.json({
-            status : 'success',
-            message : 'welcome to the server'
-         })
+//public api
+app.get("/", (req, res) => {
+  res.json({
+    status: 'success',
+    message: 'welcome to the server'
+  })
 });
 
+//health api
 app.get('/health', (req, res) => {
-    try{
+  try {
     const currentTime = new Date().toLocaleTimeString("en-GB", {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: true,
-      })
-   
-    res.json({ 
-        serverName : 'The Week List', 
-        time : currentTime , 
-        serverStatus : 'active'
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    })
+    res.json({
+      serverName: 'The Week List',
+      time: currentTime,
+      serverStatus: 'active'
     });
-    }
-    catch(error){
-        console.log(error)
-        res.json({
-            status : 'fail',
-            message : 'something went wrong Please active your server'
-         })
-    }
-  });
+  }
+  catch (error) {
+    console.log(error)
+    res.json({
+      status: 'fail',
+      message: 'something went wrong Please active your server'
+    })
+  }
+});
 
 const User = mongoose.model('User', {
-    fullname: String,
-    email: String,
-    password: String,
-    age: Number,
-    gender: String,
-    mobile: String,
-  });
+  fullname: String,
+  email: String,
+  password: String,
+  age: Number,
+  gender: String,
+  mobile: String,
+});
 
-  app.get('/users', async (req, res) => {
-    try {
-      const users = await User.find({})
-      res.json({
-        status: 'SUCCESS',
-        data: users
-      })
-    } catch (error) {
-      res.json({ 
-        status: 'FAILED',
-        message: 'Something went wrong'
-      })
-    }
-  })
+//all users api
 
-  app.post('/signup', async (req, res) => {
-    try {
-      const { fullname, email, password, age, gender,mobile} = req.body
-      const encryptedPassword = await bcrypt.hash(password, 10)
-      await User.create({ fullname, email, password: encryptedPassword, age, gender,mobile })
-      res.json({
-        status: 'SUCCESS',
-        message: "You've signed up successfully!"
-      })
-    } catch (error) {
-      console.log(error)
-      res.json({ 
-        status: 'FAILED',
-        message: 'Something went wrong'
-      })
-    }
-  })
+app.get('/users', async (req, res) => {
+  try {
+    const users = await User.find({})
+    res.json({
+      status: 'SUCCESS',
+      data: users
+    })
+  } catch (error) {
+    res.json({
+      status: 'FAILED',
+      message: 'Something went wrong'
+    })
+  }
+})
 
-  app.post('/login', async (req, res) => {
-    try {
-      const { email, password } = req.body
-      const user = await User.findOne({ email })
-      if(user) {
-        let hasPasswordMatched = await bcrypt.compare(password, user.password)
-        if(hasPasswordMatched) {
-          const jwttoken = jwt.sign(user.toJSON(), process.env.JWT_SECRET, { expiresIn: 60*30 })
-          res.json({
-            status: 'SUCCESS',
-            message: "You've logged in successfully!",
-            jwttoken
-          })
-        } else {
-          res.json({ 
-            status: 'FAILED',
-            message: 'Incorrect credentials! Please try again'
-          })
-        }
+//signup api
+app.post('/signup', async (req, res) => {
+  try {
+    const { fullname, email, password, age, gender, mobile } = req.body
+    const encryptedPassword = await bcrypt.hash(password, 10)
+    await User.create({ fullname, email, password: encryptedPassword, age, gender, mobile })
+    res.json({
+      status: 'SUCCESS',
+      message: "You've signed up successfully!"
+    })
+  } catch (error) {
+    console.log(error)
+    res.json({
+      status: 'FAILED',
+      message: 'Something went wrong'
+    })
+  }
+})
+
+//login api
+app.post('/login', async (req, res) => {
+  try {
+    const { email, password } = req.body
+    const user = await User.findOne({ email })
+    if (user) {
+      let hasPasswordMatched = await bcrypt.compare(password, user.password)
+      if (hasPasswordMatched) {
+        const jwttoken = jwt.sign(user.toJSON(), process.env.JWT_SECRET, { expiresIn: 60 * 30 })
+        res.json({
+          status: 'SUCCESS',
+          message: "You've logged in successfully!",
+          jwttoken
+        })
       } else {
-        res.json({ 
+        res.json({
           status: 'FAILED',
-          message: 'User does not exist'
+          message: 'Incorrect credentials! Please try again'
         })
       }
-    } catch (error) {
-      console.log(error)
-      res.json({ 
+    } else {
+      res.json({
         status: 'FAILED',
-        message: 'Incorrect credentials! Please try again'
+        message: 'User does not exist'
       })
     }
-  })
+  } catch (error) {
+    console.log(error)
+    res.json({
+      status: 'FAILED',
+      message: 'Incorrect credentials! Please try again'
+    })
+  }
+})
 
 // Middleware for authentication and authorization
 const authenticate = (req, res, next) => {
-  // if (!token) {
-  //   return res.status(401).json({ message: 'Unauthorized' });
-  // }
-  
   try {
-      const {jwttoken}= req.headers;
-      const decoded = jwt.verify(jwttoken,process.env.JWT_SECRET);
-      req.user = decoded;
-      next();
-    } catch (error) {
-      console.error(error);
-      res.status(401).json({ message: 'Invalid token' });
-    }
-  };
-  
-  // Example of a protected route
-  app.get('/profile', authenticate, async (req, res) => {
-  //   try {
-  //     const user = await User.findById(req.userId);
-  //     if (!user) {
-  //       return res.status(404).json({ message: 'User not found' });
-  //     }
-  
-  //     res.json({ user });
-  //   } catch (error) {
-  //     console.error(error);
-      res.json({ message: 'hi' });
-  //   }
-  });
-  
-  app.listen(process.env.PORT,() =>{
-    console.log(`Server is running on http://localhost:${process.env.PORT}`);
-    mongoose
+    const { jwttoken } = req.headers;
+    const decoded = jwt.verify(jwttoken, process.env.JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (error) {
+    console.error(error);
+    res.json({ message: 'Invalid token' });
+  }
+};
+
+//protected route
+app.get('/profile', authenticate, async (req, res) => {
+  res.send('WELCOME TO YOUR PROFILE!')
+});
+
+app.listen(process.env.PORT, () => {
+  console.log(`Server is running on http://localhost:${process.env.PORT}`);
+  mongoose
     .connect(process.env.MONGODB_URL)
     .then(() => console.log(`Server running on http://localhost:${process.env.PORT}`))
     .catch(error => console.error(error))
-    
 });
 
 
